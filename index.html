@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STU Licitaciones</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="js/config.js"></script>
+<script src="js/supabase.js"></script>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="header-logo">
+      <span class="logo-mark">STU</span>
+      <span class="header-title">Licitaciones</span>
+    </div>
+    <div class="header-meta">
+      <span id="estado-db" class="badge badge-gray">Conectando...</span>
+      <span id="usuario-label" class="muted"></span>
+    </div>
+  </div>
+</header>
+
+<nav class="nav">
+  <button class="nav-btn active" data-tab="alertas" onclick="showTab('alertas')">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+    Alertas
+  </button>
+  <button class="nav-btn" data-tab="kanban" onclick="showTab('kanban')">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="10" rx="1"/></svg>
+    Seguimiento
+  </button>
+  <button class="nav-btn" data-tab="prospectos" onclick="showTab('prospectos')">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+    Prospectos
+  </button>
+</nav>
+
+<main>
+
+<!-- ── ALERTAS ── -->
+<section id="tab-alertas" class="tab-section active">
+  <div class="metrics-grid">
+    <div class="metric"><div class="metric-label">CPVs vigilados</div><div class="metric-value" id="m-cpvs">5</div></div>
+    <div class="metric"><div class="metric-label">Plataformas</div><div class="metric-value">4</div></div>
+    <div class="metric"><div class="metric-label">Alertas activas</div><div class="metric-value" id="m-alertas">—</div></div>
+    <div class="metric"><div class="metric-label">Última ejecución</div><div class="metric-value" id="m-ultima" style="font-size:13px;">—</div></div>
+  </div>
+
+  <div class="card">
+    <h2>Configurar alertas por email</h2>
+    <p class="text-muted">El script de GitHub Actions enviará cada mañana un resumen de nuevas licitaciones que coincidan con los CPVs seleccionados.</p>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Email de destino</label>
+        <input type="email" id="alerta-email" placeholder="tu@empresa.com">
+      </div>
+      <div class="form-group">
+        <label>Zona geográfica</label>
+        <select id="alerta-zona">
+          <option value="bizkaia">Bizkaia (provincia)</option>
+          <option value="pv">País Vasco completo</option>
+          <option value="markina">Comarca Markina-Ondarroa</option>
+          <option value="gernika">Busturialdea / Gernika</option>
+        </select>
+      </div>
+      <div class="form-group" style="grid-column:1/-1;">
+        <label>Palabras clave adicionales (separadas por coma)</label>
+        <input type="text" id="alerta-keywords" placeholder="prensa, torno, soldadura, compresor...">
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="guardarAlerta()">Guardar configuración</button>
+  </div>
+
+  <h2 style="margin:1.5rem 0 0.75rem;">CPVs monitorizados</h2>
+  <div class="cpv-grid" id="cpv-grid"></div>
+
+  <h2 style="margin:1.5rem 0 0.75rem;">Plataformas</h2>
+  <div class="platform-grid">
+    <div class="platform-card">
+      <div class="platform-name">ebizkaia.eus</div>
+      <div class="platform-desc">DFB + entidades forales · <a href="https://elicitacion.ebizkaia.eus" target="_blank">Abrir ↗</a></div>
+      <span class="badge badge-success">Activa</span>
+    </div>
+    <div class="platform-card">
+      <div class="platform-name">contratacion.euskadi.eus</div>
+      <div class="platform-desc">Gobierno Vasco + municipios</div>
+      <span class="badge badge-success">Activa</span>
+    </div>
+    <div class="platform-card">
+      <div class="platform-name">contrataciondelestado.es</div>
+      <div class="platform-desc">PLACE · AENA Bilbao, ADIF...</div>
+      <span class="badge badge-success">Activa</span>
+    </div>
+    <div class="platform-card">
+      <div class="platform-name">infoconcurso.com</div>
+      <div class="platform-desc">Agregador — configurar alertas manualmente</div>
+      <span class="badge badge-warn">Configurar</span>
+    </div>
+  </div>
+
+  <div class="info-box" style="margin-top:1.5rem;">
+    <strong>Para activar las alertas automáticas</strong> (GitHub Actions), añade estos secretos en tu repositorio:<br>
+    GitHub → Settings → Secrets and variables → Actions:<br>
+    <code>SUPABASE_URL</code> · <code>SUPABASE_SERVICE_KEY</code> · <code>EMAIL_DESTINO</code> · <code>EMAIL_ORIGEN</code> · <code>EMAIL_PASSWORD</code>
+  </div>
+</section>
+
+<!-- ── KANBAN ── -->
+<section id="tab-kanban" class="tab-section">
+  <div class="metrics-grid">
+    <div class="metric"><div class="metric-label">Total activas</div><div class="metric-value" id="k-total">0</div></div>
+    <div class="metric"><div class="metric-label">Plazo &lt; 7 días</div><div class="metric-value warn" id="k-urgentes">0</div></div>
+    <div class="metric"><div class="metric-label">Presentadas</div><div class="metric-value" id="k-pres">0</div></div>
+    <div class="metric"><div class="metric-label">Ganadas</div><div class="metric-value success" id="k-ganadas">0</div></div>
+  </div>
+
+  <div class="section-actions">
+    <h2>Tablero de licitaciones</h2>
+    <button class="btn btn-primary" onclick="abrirModal('modal-lic')">+ Nueva licitación</button>
+  </div>
+
+  <div class="kanban">
+    <div class="kanban-col">
+      <div class="kanban-col-header">Detectada <span class="col-count" id="cnt-detectada">0</span></div>
+      <div class="kanban-items" id="col-detectada"></div>
+    </div>
+    <div class="kanban-col">
+      <div class="kanban-col-header">Preparando <span class="col-count" id="cnt-preparando">0</span></div>
+      <div class="kanban-items" id="col-preparando"></div>
+    </div>
+    <div class="kanban-col">
+      <div class="kanban-col-header">Presentada <span class="col-count" id="cnt-presentada">0</span></div>
+      <div class="kanban-items" id="col-presentada"></div>
+    </div>
+    <div class="kanban-col">
+      <div class="kanban-col-header">Resuelta <span class="col-count" id="cnt-resuelta">0</span></div>
+      <div class="kanban-items" id="col-resuelta"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ── PROSPECTOS ── -->
+<section id="tab-prospectos" class="tab-section">
+  <div class="metrics-grid">
+    <div class="metric"><div class="metric-label">Identificados</div><div class="metric-value" id="p-total">0</div></div>
+    <div class="metric"><div class="metric-label">Contactados</div><div class="metric-value" id="p-cont">0</div></div>
+    <div class="metric"><div class="metric-label">Interesados</div><div class="metric-value success" id="p-int">0</div></div>
+    <div class="metric"><div class="metric-label">Clientes</div><div class="metric-value success" id="p-cli">0</div></div>
+  </div>
+
+  <div class="section-actions">
+    <h2>Base de prospectos</h2>
+    <button class="btn btn-primary" onclick="abrirModal('modal-prosp')">+ Añadir prospecto</button>
+  </div>
+
+  <div id="prospectos-list"></div>
+</section>
+
+</main>
+
+<!-- MODAL LICITACIÓN -->
+<div class="modal-backdrop" id="modal-lic">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Nueva licitación</h3>
+      <button class="btn-icon" onclick="cerrarModal('modal-lic')">✕</button>
+    </div>
+    <div class="form-grid">
+      <div class="form-group" style="grid-column:1/-1;">
+        <label>Título / objeto del contrato *</label>
+        <input type="text" id="lic-titulo" placeholder="Servicio de mantenimiento de maquinaria...">
+      </div>
+      <div class="form-group">
+        <label>Organismo convocante</label>
+        <input type="text" id="lic-organismo" placeholder="DFB, Ayto. Gernika...">
+      </div>
+      <div class="form-group">
+        <label>Importe (€ sin IVA)</label>
+        <input type="number" id="lic-importe" placeholder="15000">
+      </div>
+      <div class="form-group">
+        <label>Fecha límite presentación</label>
+        <input type="date" id="lic-plazo">
+      </div>
+      <div class="form-group">
+        <label>CPV principal</label>
+        <select id="lic-cpv">
+          <option value="50530000">50530000 — Mantenimiento maquinaria</option>
+          <option value="50000000">50000000 — Reparación y mantenimiento</option>
+          <option value="42000000">42000000 — Maquinaria industrial</option>
+          <option value="44500000">44500000 — Herramientas y repuestos</option>
+          <option value="43000000">43000000 — Maquinaria construcción</option>
+          <option value="otro">Otro</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Nº expediente</label>
+        <input type="text" id="lic-expediente" placeholder="2026/0016/...">
+      </div>
+      <div class="form-group">
+        <label>Estado inicial</label>
+        <select id="lic-estado">
+          <option value="detectada">Detectada</option>
+          <option value="preparando">Preparando oferta</option>
+          <option value="presentada">Presentada</option>
+        </select>
+      </div>
+      <div class="form-group" style="grid-column:1/-1;">
+        <label>URL licitación</label>
+        <input type="url" id="lic-url" placeholder="https://elicitacion.ebizkaia.eus/...">
+      </div>
+      <div class="form-group" style="grid-column:1/-1;">
+        <label>Notas</label>
+        <textarea id="lic-notas" rows="3" placeholder="Requisitos especiales, competencia conocida, ventajas STU..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="cerrarModal('modal-lic')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarLicitacion()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL PROSPECTO -->
+<div class="modal-backdrop" id="modal-prosp">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Nuevo prospecto</h3>
+      <button class="btn-icon" onclick="cerrarModal('modal-prosp')">✕</button>
+    </div>
+    <div class="form-grid">
+      <div class="form-group" style="grid-column:1/-1;">
+        <label>Empresa *</label>
+        <input type="text" id="p-empresa" placeholder="Nombre de la empresa...">
+      </div>
+      <div class="form-group">
+        <label>Municipio</label>
+        <input type="text" id="p-municipio" placeholder="Gernika, Durango...">
+      </div>
+      <div class="form-group">
+        <label>Sector</label>
+        <select id="p-sector">
+          <option>Fabricación / industria</option>
+          <option>Administración pública</option>
+          <option>Construcción / obra civil</option>
+          <option>Logística / transporte</option>
+          <option>Sanitario / educativo</option>
+          <option>Otro</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Maquinaria de interés</label>
+        <input type="text" id="p-maquinaria" placeholder="Prensas, tornos, compresores...">
+      </div>
+      <div class="form-group">
+        <label>Puntuación</label>
+        <select id="p-score">
+          <option value="1">1 — Bajo</option>
+          <option value="2">2 — Medio</option>
+          <option value="3" selected>3 — Alto</option>
+          <option value="4">4 — Muy alto</option>
+          <option value="5">5 — Prioritario</option>
+        </select>
+      </div>
+      <div class="form-group" style="grid-column:1/-1;">
+        <label>Contacto (nombre / email / teléfono)</label>
+        <input type="text" id="p-contacto" placeholder="Jon Etxebarria · jon@empresa.com · 946...">
+      </div>
+      <div class="form-group" style="grid-column:1/-1;">
+        <label>Fuente de detección</label>
+        <input type="text" id="p-fuente" placeholder="Adjudicación nº 2024/... · Referencia licitación...">
+      </div>
+      <div class="form-group" style="grid-column:1/-1;">
+        <label>Notas</label>
+        <textarea id="p-notas" rows="3" placeholder="Han licitado mantenimiento de X en 2024, presupuesto ~50k€..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="cerrarModal('modal-prosp')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarProspecto()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+</body>
+</html>
