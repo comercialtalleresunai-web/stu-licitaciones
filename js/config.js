@@ -1,5 +1,5 @@
 // STU Licitaciones — Configuración
-// ⚠️  Rellena estos valores con los de tu proyecto Supabase
+// ⚠️ Rellena estos valores con los de tu proyecto Supabase
 // Supabase → Settings → API
 
 const CONFIG = {
@@ -12,13 +12,14 @@ const CONFIG = {
   // Nombre de la empresa (aparece en la cabecera)
   EMPRESA: 'Suministros Talleres Unai SL',
 
-  // CPVs que se monitorizan por defecto
+  // CPVs de maquinaria agricola y forestal monitorizados
   CPVS_DEFAULT: [
-    { code: '50530000', label: 'Mantenimiento de maquinaria' },
-    { code: '50000000', label: 'Reparación y mantenimiento' },
-    { code: '42000000', label: 'Maquinaria industrial' },
-    { code: '44500000', label: 'Herramientas y repuestos' },
-    { code: '43000000', label: 'Maquinaria minería / construcción' },
+    { code: '16000000', label: 'Maquinaria agrícola (padre)' },
+    { code: '16160000', label: 'Equipo diverso para jardinería' },
+    { code: '16310000', label: 'Máquinas segadoras' },
+    { code: '16311000', label: 'Cortadoras de césped' },
+    { code: '16600000', label: 'Maquinaria agrícola/forestal especializada' },
+    { code: '16800000', label: 'Partes de maquinaria agrícola y forestal' },
   ],
 
   // Zona geográfica por defecto
