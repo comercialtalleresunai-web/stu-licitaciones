@@ -1,22 +1,22 @@
 // STU Licitaciones — Cliente Supabase
 // Importado desde CDN en index.html
 
-var supabase = null;
+var db = null;
 
 function initSupabase() {
   if (!CONFIG.SUPABASE_URL || CONFIG.SUPABASE_URL.includes('TU-PROYECTO')) {
     console.warn('⚠️ Supabase no configurado. Usando modo local (localStorage).');
     return false;
   }
-  supabase = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
+  db = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
   return true;
 }
 
 // ── LICITACIONES ──────────────────────────────────────────
 
 async function db_getLicitaciones() {
-  if (!supabase) return localGet('licitaciones', []);
-  const { data, error } = await supabase
+  if (!db) return localGet('licitaciones', []);
+  const { data, error } = await db
     .from('licitaciones')
     .select('*')
     .order('creado_en', { ascending: false });
@@ -25,7 +25,7 @@ async function db_getLicitaciones() {
 }
 
 async function db_saveLicitacion(lic) {
-  if (!supabase) {
+  if (!db) {
     const arr = localGet('licitaciones', []);
     const idx = arr.findIndex(x => x.id === lic.id);
     if (idx >= 0) arr[idx] = lic; else arr.unshift({ ...lic, id: crypto.randomUUID() });
@@ -33,21 +33,21 @@ async function db_saveLicitacion(lic) {
     return lic;
   }
   const { data, error } = lic.id
-    ? await supabase.from('licitaciones').upsert(lic).select().single()
-    : await supabase.from('licitaciones').insert(lic).select().single();
+    ? await db.from('licitaciones').upsert(lic).select().single()
+            : await db.from('licitaciones').insert(lic).select().single();
   if (error) { console.error(error); return null; }
   return data;
 }
 
 async function db_updateEstado(id, estado, usuario) {
-  if (!supabase) {
+  if (!db) {
     const arr = localGet('licitaciones', []);
     const lic = arr.find(x => x.id === id);
     if (lic) { lic.estado = estado; localSet('licitaciones', arr); }
     return;
   }
-  await supabase.from('licitaciones').update({ estado }).eq('id', id);
-  await supabase.from('licitaciones_historial').insert({
+  await db.from('licitaciones').update({ estado }).eq('id', id);
+  await db.from('licitaciones_historial').insert({
     licitacion_id: id,
     accion: `Estado → ${estado}`,
     usuario: usuario || 'usuario',
@@ -55,16 +55,16 @@ async function db_updateEstado(id, estado, usuario) {
 }
 
 async function db_deleteLicitacion(id) {
-  if (!supabase) {
+  if (!db) {
     localSet('licitaciones', localGet('licitaciones', []).filter(x => x.id !== id));
     return;
   }
-  await supabase.from('licitaciones').delete().eq('id', id);
+  await db.from('licitaciones').delete().eq('id', id);
 }
 
 async function db_getHistorial(licitacion_id) {
-  if (!supabase) return [];
-  const { data } = await supabase
+  if (!db) return [];
+  const { data } = await db
     .from('licitaciones_historial')
     .select('*')
     .eq('licitacion_id', licitacion_id)
@@ -75,8 +75,8 @@ async function db_getHistorial(licitacion_id) {
 // ── PROSPECTOS ────────────────────────────────────────────
 
 async function db_getProspectos() {
-  if (!supabase) return localGet('prospectos', []);
-  const { data, error } = await supabase
+  if (!db) return localGet('prospectos', []);
+  const { data, error } = await db
     .from('prospectos')
     .select('*')
     .order('score', { ascending: false });
@@ -85,7 +85,7 @@ async function db_getProspectos() {
 }
 
 async function db_saveProspecto(p) {
-  if (!supabase) {
+  if (!db) {
     const arr = localGet('prospectos', []);
     const idx = arr.findIndex(x => x.id === p.id);
     if (idx >= 0) arr[idx] = p; else arr.unshift({ ...p, id: crypto.randomUUID() });
@@ -93,32 +93,32 @@ async function db_saveProspecto(p) {
     return p;
   }
   const { data, error } = p.id
-    ? await supabase.from('prospectos').upsert(p).select().single()
-    : await supabase.from('prospectos').insert(p).select().single();
+    ? await db.from('prospectos').upsert(p).select().single()
+            : await db.from('prospectos').insert(p).select().single();
   if (error) { console.error(error); return null; }
   return data;
 }
 
 async function db_updateEstadoProspecto(id, estado) {
-  if (!supabase) {
+  if (!db) {
     const arr = localGet('prospectos', []);
     const p = arr.find(x => x.id === id);
     if (p) { p.estado = estado; localSet('prospectos', arr); }
     return;
   }
-  await supabase.from('prospectos').update({ estado }).eq('id', id);
+  await db.from('prospectos').update({ estado }).eq('id', id);
 }
 
 // ── ALERTAS ───────────────────────────────────────────────
 
 async function db_saveAlertaConfig(config) {
-  if (!supabase) { localSet('alerta_config', config); return; }
-  await supabase.from('alertas_config').upsert(config);
+  if (!db) { localSet('alerta_config', config); return; }
+  await db.from('alertas_config').upsert(config);
 }
 
 async function db_getAlertaConfig() {
-  if (!supabase) return localGet('alerta_config', null);
-  const { data } = await supabase
+  if (!db) return localGet('alerta_config', null);
+  const { data } = await db
     .from('alertas_config')
     .select('*')
     .limit(1)
@@ -129,8 +129,8 @@ async function db_getAlertaConfig() {
 // ── SUSCRIPCIÓN TIEMPO REAL ───────────────────────────────
 
 function db_suscribir(tabla, callback) {
-  if (!supabase) return;
-  supabase
+  if (!db) return;
+  db
     .channel(`realtime-${tabla}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: tabla }, callback)
     .subscribe();
