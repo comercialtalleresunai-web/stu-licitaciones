@@ -1,0 +1,166 @@
+name: Alertas Licitaciones STU
+
+on:
+  schedule:
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+
+jobs:
+  buscar-licitaciones:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Instalar dependencias Python
+        run: pip install requests supabase
+
+      - name: Buscar y notificar licitaciones
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          EMAIL_DESTINO: ${{ secrets.EMAIL_DESTINO }}
+          EMAIL_ORIGEN: ${{ secrets.EMAIL_ORIGEN }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+        run: python3 << 'PYEOF'
+import requests
+import smtplib
+import ssl
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from datetime import date, timedelta
+import os
+import json
+
+SUPABASE_URL = os.environ['SUPABASE_URL']
+SUPABASE_KEY = os.environ['SUPABASE_SERVICE_KEY']
+EMAIL_DESTINO = os.environ['EMAIL_DESTINO']
+EMAIL_ORIGEN = os.environ['EMAIL_ORIGEN']
+EMAIL_PASSWORD = os.environ['EMAIL_PASSWORD']
+
+SMTP_HOST = 'smtp.hostinger.com'
+SMTP_PORT = 465
+
+CPV_LIST = ['50530000', '42000000', '44500000', '43000000', '50000000']
+
+SUPABASE_HEADERS = {
+    'apikey': SUPABASE_KEY,
+    'Authorization': f'Bearer {SUPABASE_KEY}',
+    'Content-Type': 'application/json',
+    'Prefer': 'return=representation'
+}
+
+def get_expedientes_existentes():
+    resp = requests.get(
+        f"{SUPABASE_URL}/rest/v1/licitaciones?select=expediente&not.expediente.is.null",
+        headers=SUPABASE_HEADERS
+    )
+    if resp.status_code == 200:
+        return {r['expediente'] for r in resp.json() if r.get('expediente')}
+    return set()
+
+def buscar_licitaciones():
+    hoy = date.today()
+    ayer = hoy - timedelta(days=1)
+    nuevas = []
+    existentes = get_expedientes_existentes()
+    print(f"Expedientes existentes en BD: {len(existentes)}")
+
+    for cpv in CPV_LIST:
+        try:
+            url = "https://contrataciondelestado.es/wps/PA_1_GENERAL_ACTIONSOCIAL83KG532DO53UOJ/ObtenerDocumento"
+            params = {
+                'tipo': 'licitaciones',
+                'codCPV': cpv,
+                'fechaDesde': ayer.strftime('%d-%m-%Y'),
+                'fechaHasta': hoy.strftime('%d-%m-%Y')
+            }
+            resp = requests.get(url, params=params, timeout=30,
+                              headers={'Accept': 'application/json'})
+            print(f"CPV {cpv}: status {resp.status_code}")
+            if resp.status_code == 200:
+                try:
+                    data = resp.json()
+                    lics = data if isinstance(data, list) else data.get('licitaciones', [])
+                    for lic in lics:
+                        exp = str(lic.get('expediente', lic.get('id', '')))
+                        if exp and exp not in existentes:
+                            lic['cpv_buscado'] = cpv
+                            nuevas.append(lic)
+                            existentes.add(exp)
+                except:
+                    pass
+        except Exception as e:
+            print(f"Error CPV {cpv}: {e}")
+
+    return nuevas
+
+def guardar_licitacion(lic):
+    data = {
+        'titulo': str(lic.get('titulo', lic.get('descripcion', lic.get('title', 'Sin titulo'))))[:500],
+        'organismo': str(lic.get('organoContratacion', lic.get('organismo', '')))[:300],
+        'importe': float(lic.get('importeLicitacion', lic.get('importe', 0)) or 0),
+        'cpv': str(lic.get('cpv_buscado', lic.get('cpv', '')))[:50],
+        'url': str(lic.get('url', lic.get('enlace', '')))[:500],
+        'expediente': str(lic.get('expediente', lic.get('id', '')))[:100],
+        'estado': 'detectada',
+        'creado_por': 'robot-alertas'
+    }
+    resp = requests.post(
+        f"{SUPABASE_URL}/rest/v1/licitaciones",
+        headers=SUPABASE_HEADERS,
+        json=data
+    )
+    if resp.status_code in [200, 201]:
+        return data
+    print(f"Error guardando: {resp.status_code}")
+    return None
+
+def enviar_email(licitaciones):
+    if not licitaciones:
+        return
+    asunto = f"STU Alertas: {len(licitaciones)} licitacion(es) nueva(s) - {date.today().strftime('%d/%m/%Y')}"
+    html = f"""<html><body style="font-family:Arial,sans-serif;margin:20px">
+<h2 style="color:#2563eb">STU Licitaciones - Nuevas alertas del {date.today().strftime('%d/%m/%Y')}</h2>
+<p>Se han detectado <strong>{len(licitaciones)}</strong> licitacion(es) nueva(s):</p><hr>"""
+    for lic in licitaciones:
+        imp = f"{float(lic.get('importe',0)):,.0f} &euro;" if lic.get('importe') else "No especificado"
+        url_html = f'<a href="{lic["url"]}">Ver licitacion</a>' if lic.get('url') else ''
+        html += f"""<div style="background:#f8f9fa;padding:15px;margin:10px 0;border-left:4px solid #2563eb">
+<h3 style="color:#1e40af;margin:0 0 8px">{lic.get('titulo','Sin titulo')}</h3>
+<p><strong>Organismo:</strong> {lic.get('organismo','')}</p>
+<p><strong>Importe:</strong> {imp}</p>
+<p><strong>CPV:</strong> {lic.get('cpv','')}</p>
+{f'<p>{url_html}</p>' if url_html else ''}
+</div>"""
+    html += f"""<hr><p style="color:#6b7280;font-size:12px">
+STU Licitaciones &mdash; <a href="https://comercialtalleresunai-web.github.io/stu-licitaciones/">Ver app</a>
+</p></body></html>"""
+    msg = MIMEMultipart('alternative')
+    msg['Subject'] = asunto
+    msg['From'] = EMAIL_ORIGEN
+    msg['To'] = EMAIL_DESTINO
+    msg.attach(MIMEText(html, 'html', 'utf-8'))
+    context = ssl.create_default_context()
+    with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, context=context) as server:
+        server.login(EMAIL_ORIGEN, EMAIL_PASSWORD)
+        server.sendmail(EMAIL_ORIGEN, EMAIL_DESTINO, msg.as_string())
+    print(f"Email enviado a {EMAIL_DESTINO}")
+
+def main():
+    print(f"=== STU Alertas {date.today()} ===")
+    licitaciones = buscar_licitaciones()
+    print(f"Nuevas encontradas: {len(licitaciones)}")
+    guardadas = []
+    for lic in licitaciones:
+        g = guardar_licitacion(lic)
+        if g:
+            guardadas.append(g)
+    print(f"Guardadas en Supabase: {len(guardadas)}")
+    if guardadas:
+        enviar_email(guardadas)
+    print("=== Completado ===")
+
+main()
+PYEOF
