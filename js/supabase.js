@@ -1,7 +1,7 @@
 // STU Licitaciones — Cliente Supabase
 // Importado desde CDN en index.html
 
-let supabase = null;
+var supabase = null;
 
 function initSupabase() {
   if (!CONFIG.SUPABASE_URL || CONFIG.SUPABASE_URL.includes('TU-PROYECTO')) {
